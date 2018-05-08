@@ -1,0 +1,270 @@
+<%
+def set_node_template_vars(values)
+  @node_identity          = values["node_identity"]
+  @duplicates             = values["duplicates"]
+  @api_host               = values["api"]["api_host"]
+  @api_limit              = values["api"]["api_limit"]
+  @exposed                = values["api"]["exposed"]
+  @zmq                    = values["zmq"]
+  @memory_request         = values["memory_request"]
+  @api_port               = values["ports"]["node"]["api_port"]
+  @udp_reciver_port       = values["ports"]["node"]["udp_reciver_port"]
+  @tcp_reciver_port       = values["ports"]["node"]["tcp_reciver_port"]
+  @zmq_port               = values["ports"]["node"]["zmq_port"]
+  @api_nodeport           = values["ports"]["service"]["api_nodeport"]
+  @udp_nodeport           = values["ports"]["service"]["udp_nodeport"]
+  @tcp_nodeport           = values["ports"]["service"]["tcp_nodeport"]
+  @zmq_nodeport           = values["ports"]["service"]["zmq_nodeport"]
+  return
+end
+-%>
+# Give permissions to system:serviceaccount:default:default to access kubectl
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: iota-cluster-role
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+      
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iota-connector-deployment
+spec:
+  selector:
+    name: iota-connector-pod
+    matchLabels:
+      name: iota-connector-pod
+  strategy:
+    type: RollingUpdate
+  replicas: 1
+  template:
+    metadata:
+      name: iota-connector-pod
+      labels:
+        name: iota-connector-pod
+    spec:
+      containers:
+      - name: iota-connector-container
+        image: retrolatch/iota-connector:latest
+        tty: true # needed to allow log flow
+<%- @nodes.each_with_index do |node, index| -%>
+<%= set_node_template_vars(node.values.first) -%>
+<%- (0..@duplicates).each do |node_number| -%>
+<%- node_name = @node_identity + (node_number + index).to_s -%>
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iotaconfig-<%= node_name %>
+  namespace: default
+  labels:
+    app: kubernetesiota
+data:
+  iotaconfig: |-
+    [IRI]
+    PORT = <%= @api_port %>
+    UDP_RECEIVER_PORT = <%= @udp_reciver_port %>
+    TCP_RECEIVER_PORT = <%= @tcp_reciver_port %>
+    TESTNET = true
+    DB_PATH = /iri/<%= node_name %>/db
+    DB_LOG_PATH = iri/<%= node_name %>/dblogs
+    IXI_DIR = /iri/<%= node_name %>/ixi
+    <%- if @api_host -%>
+    API_HOST = <%= @api_host %>
+    <%- end -%>
+    <%- if @api_limit -%>
+    REMOTE_LIIMIT_API = "<%= @api_limit %>"
+    <%- end -%>
+    ZMQ_ENABLED = <%= @zmq %>
+    ZMQ_PORT = <%= @zmq_port %>
+<%- end -%>
+<%- end -%>
+<%- if @config["global_loadbalancer"] -%>
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: global-api-web-svc
+  labels:
+    app: kubernetesiota
+    tier: backend
+spec:
+  selector:
+    app: kubernetesiota
+    tier: backend
+    type: node
+  type: LoadBalancer
+  ports:
+    - name: global-api-port
+      protocol: TCP
+      port: <%= @api_port %>
+      targetPort: <%= @api_port %>
+<%- end -%>
+<%- @nodes.each_with_index do |node, index| -%>
+<%= set_node_template_vars(node.values.first) -%>
+<%- (0..@duplicates).each do |node_number| -%>
+<%- node_name = @node_identity + (node_number + index).to_s -%>
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= node_name %>-svc
+  labels:
+    app: kubernetesiota
+    tier: backend
+    name: <%= node_name %>-svc
+spec:
+  selector:
+    app: kubernetesiota
+    tier: backend
+    name: <%= node_name %>-deployment
+  type: NodePort
+  ports:
+    - name: <%= node_name %>-api
+      protocol: TCP
+      port: <%= @api_port %>
+      targetPort: <%= @api_port %>
+      nodePort: <%= @api_nodeport + node_number + index %>
+    - name: <%= node_name %>-udp-reciver
+      protocol: UDP
+      port: <%= @udp_reciver_port %>
+      targetPort: <%= @udp_reciver_port %>
+      nodePort: <%= @udp_nodeport + node_number + index %>
+    - name: <%= node_name %>-tcp-reciver
+      protocol: TCP
+      port: <%= @tcp_reciver_port %>
+      targetPort: <%= @tcp_reciver_port %>
+      nodePort: <%= @tcp_nodeport + node_number + index %>
+<%- if @exposed -%>
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= node_name %>-api-web-svc
+  labels:
+    app: kubernetesiota
+    tier: backend
+    name: <%= node_name %>-api-web-svc
+spec:
+  selector:
+    app: kubernetesiota
+    tier: backend
+    name: <%= node_name %>-deployment
+  type: LoadBalancer
+  ports:
+    - name: <%= node_name %>-api
+      protocol: TCP
+      port: <%= @api_port %>
+      targetPort: <%= @api_port %>
+<%- end -%>
+<%- if @zmq -%>
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: <%= node_name %>-zmq-web-svc
+  labels:
+    app: kubernetesiota
+    tier: backend
+    name: <%= node_name %>-zmq-web-svc
+spec:
+  selector:
+    app: kubernetesiota
+    tier: backend
+    name: <%= node_name %>-deployment
+  type: LoadBalancer
+  ports:
+    - name: <%= node_name %>-zmq-port
+      protocol: TCP
+      port: <%= @zmq_port %>
+      targetPort: <%= @zmq_port %>
+<%- end -%>
+<%- end -%>
+<%- end -%>
+<%- @nodes.each_with_index do |node, index| -%>
+<%= set_node_template_vars(node.values.first) -%>
+<%- (0..@duplicates).each do |node_number| -%>
+<%- node_name = @node_identity + (node_number + index).to_s -%>
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iota-<%= node_name %>-deployment
+  labels:
+    app: kubernetesiota
+spec:
+  selector:
+    matchLabels:
+      name: iota-<%= node_name %>-pod
+  strategy:
+    type: RollingUpdate
+  replicas: 1
+  template:
+    metadata:
+      name: iota-<%= node_name %>-pod
+      labels:
+        app: kubernetesiota
+        tier: backend
+        type: node
+        name: iota-<%= node_name %>-pod
+    spec:
+      containers:
+      - name: iota-<%= node_name %>-container
+        image: retrolatch/private-iri:latest
+        <%- if @memory_request -%>
+        resources:
+          requests:
+            memory: "<%= @memory_request %>"
+        <%- end -%>
+        command: [ "sh" ]
+        args:
+        - "-cx"
+        - "mkdir -p /etc/iri/<%= node_name %>;
+           cp /iri/iotaconfigmap/<%= node_name %>/iotaconfig.ini /etc/iri/<%= node_name %>;
+           /usr/bin/java \
+           -XX:+DisableAttachMechanism \
+           -Xmx8g \
+           -Xms256m \
+           -Dlogback.configurationFile=/iri/conf/logback.xml \
+           -Djava.net.preferIPv4Stack=true \
+           -jar /iri/iri.jar \
+           --config /etc/iri/<%= node_name %>/iotaconfig.ini;"
+        ports:
+          - containerPort: <%= @api_port %>
+          - containerPort: <%= @udp_reciver_port %>
+            protocol: UDP
+          - containerPort: <%= @tcp_reciver_port %>
+            protocol: TCP
+          - containerPort: <%= @zmq_port %>
+        volumeMounts:
+        - name: <%= node_name %>-persistent-storage
+          mountPath: /iri/<%= node_name %>
+        - name: <%= node_name %>-config-persistent-storage
+          mountPath: /iri/iotaconfigmap/<%= node_name %>
+      volumes:
+      - name: <%= node_name %>-persistent-storage
+        hostPath:
+          path: /var/lib/docker/iota-storage/<%= node_name %>
+      - name: <%= node_name %>-config-persistent-storage
+        configMap:
+          name: iotaconfig-<%= node_name %>
+          items:
+          - key: iotaconfig
+            path: iotaconfig.ini
+<%- end -%>
+<%- end -%>

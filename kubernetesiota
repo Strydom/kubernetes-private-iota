@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby
+
+require "yaml"
+require "erb"
+
+# generic variables
+@config     = YAML.load_file("deployment.config.yaml")
+@nodes      = @config["nodes"]
+
+#####################
+# deployment
+#####################
+File.open("deployment.yaml", "w") do |f|
+  f.puts (ERB.new(File.read("deployment.yaml.erb"), nil, "-").result)
+end
+

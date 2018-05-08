@@ -1,0 +1,43 @@
+# Add a LoadBalancer in front of all nodes, exposing their API and distributing transaction request load.
+# Uses port 14265 by default.
+global_loadbalancer: true
+#
+# Use to define different node configurations
+#
+nodes:
+- default-node:
+    node_identity: node
+    # How many duplicates of this node to deploy. Will increment the service port numbers accordingly
+    duplicates: 1
+    # Optional
+    api:
+      # Optional - Accessible from outside the container
+      api_host: 0.0.0.0
+      # Optional - Restrict the use of the given API functions
+      # see [https://iota.readme.io/reference] for options
+      api_limit: "interruptAttachingToTangle, attachToTangle"
+      # Optional - Add a LoadBalancer in front of the node to expose the API outside of the cluster.
+      exposed: false
+    # In development still. Exposes the ZMQ endpoint. Corresponding Port needs to be set.
+    zmq: false
+    # Optional - Request 'minimum' memory for each node.
+    # Can be used to ensure nodes are properly distributed across VM's etc.
+    memory_request: "1Gi"
+    ports:
+      # These ports need to be exposed on the IRI docker image (are by default).
+      # 5556 is the only port not exposed by default.
+      node:
+        api_port: 14265
+        udp_reciver_port: 14777
+        tcp_reciver_port: 15777
+        zmq_port: 5556
+      # These ports are for the Kubernetes services.
+      # They need to be unique even when incremented as used for duplicates
+      service:
+        api_nodeport: 30000
+        udp_nodeport: 31000
+        tcp_nodeport: 32000
+        zmq_nodeport: 33000
+#- another-node:
+#    Can have all of the same options as above.
+#    and so on...
