@@ -12,9 +12,14 @@ A Python script that runs on the cluster, listening for Kubernetes events, addin
 when the Pod IP's and eventually the Ports become available.
 
 This deployment uses a [pre-built docker image](https://hub.docker.com/r/retrolatch/private-iri/)
-from the instructions found at the [private-iota-testnet](https://github.com/schierlm/private-iota-testnet) repository.
-The [Snapshot.txt](kubernetes-private-iota/Snapshot.txt) used with the preallocated addresses can be found in this directory.
+bassed off of the instructions from the [private-iota-testnet](https://github.com/schierlm/private-iota-testnet) repository.
+The IRI branch used for the docker image can be found at [Strydom/iri/tree/private](https://github.com/Strydom/iri/tree/private).
+The [Snapshot.txt](Snapshot.txt) used with the preallocated addresses can be found in this directory.
 
-## Tools
+## This repository is used by
 
-- [IOTA Peer Manager](https://github.com/akashgoswami/ipm)
+- [iota-test](https://github.com/Strydom/iota-test) - A basic testing script to load an IOTA network.
+
+## Additional Tools
+
+- [IOTA Peer Manager](https://github.com/akashgoswami/ipm) - For viewing, adding and deleting neighbours.
